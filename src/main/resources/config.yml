@@ -1,0 +1,9 @@
+# ┏━━━━━━ Logger Settings ━━━━━━━┓
+
+# Discord Guild ID for logging
+discord:
+  bot-token: ""
+  logger: true
+  logger-guildid: "54882415665525845"
+
+# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
