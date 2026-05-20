@@ -1,8 +1,9 @@
-package org.flennn;
+package org.flennn.proxylogger.config;
 
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.flennn.proxylogger.util.Console;
 
 import javax.inject.Inject;
 import java.io.IOException;
@@ -52,7 +53,7 @@ public class ConfigManager {
 
             validate();
         } catch (IOException e) {
-            this.logger.severe("Failed to load config.yml: " + e.getMessage());
+            Console.error(this.logger, "Failed to load config.yml: " + e.getMessage());
             this.config = new HashMap<>();
         }
     }
@@ -73,11 +74,11 @@ public class ConfigManager {
         }
 
         if (getBotToken().isBlank()) {
-            this.logger.warning("Discord logging is enabled, but discord.bot-token is empty.");
+            Console.warn(this.logger, "Discord logging is enabled, but discord.bot-token is empty.");
         }
 
         if (getGuildId().isBlank()) {
-            this.logger.warning("Discord logging is enabled, but discord.guild-id is empty.");
+            Console.warn(this.logger, "Discord logging is enabled, but discord.guild-id is empty.");
         }
     }
 

@@ -1,4 +1,4 @@
-package org.flennn;
+package org.flennn.proxylogger.listener;
 
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.event.Subscribe;
@@ -7,6 +7,10 @@ import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.PlayerChatEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.Player;
+import org.flennn.proxylogger.ProxyLogger;
+import org.flennn.proxylogger.config.ConfigManager;
+import org.flennn.proxylogger.discord.DiscordLogger;
+import org.flennn.proxylogger.util.Utils;
 
 import java.net.InetAddress;
 import java.time.Duration;

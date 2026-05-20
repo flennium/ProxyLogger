@@ -1,4 +1,4 @@
-package org.flennn;
+package org.flennn.proxylogger;
 
 import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandManager;
@@ -12,13 +12,17 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
+import org.flennn.proxylogger.command.ReloadConfigCommand;
+import org.flennn.proxylogger.config.ConfigManager;
+import org.flennn.proxylogger.discord.DiscordLogger;
+import org.flennn.proxylogger.listener.ActivityListeners;
+import org.flennn.proxylogger.util.Console;
 
 import java.nio.file.Path;
 import java.util.EnumSet;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
-@Plugin(id = "proxylogger", name = "ProxyLogger", version = "1.1.0", authors = {"flennn"})
+@Plugin(id = "proxylogger", name = "ProxyLogger", version = "1.1.1", authors = {"flennn"})
 public class ProxyLogger {
     private final ProxyServer proxyServer;
     private final Logger logger;
@@ -36,11 +40,11 @@ public class ProxyLogger {
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-        this.logger.info("Starting ProxyLogger...");
+        Console.info(this.logger, "Starting plugin...");
         startDiscord();
         registerListeners();
         registerCommands();
-        this.logger.info("ProxyLogger is ready.");
+        Console.success(this.logger, "Plugin is ready.");
     }
 
     @Subscribe
@@ -70,21 +74,21 @@ public class ProxyLogger {
     }
 
     public synchronized void reload() {
-        this.logger.info("Reloading ProxyLogger...");
+        Console.info(this.logger, "Reloading configuration...");
         this.configManager.reload();
         shutdownDiscord();
         startDiscord();
-        this.logger.info("ProxyLogger reloaded.");
+        Console.success(this.logger, "Reload complete.");
     }
 
     private synchronized void startDiscord() {
         if (!this.configManager.isDiscordEnabled()) {
-            this.logger.info("Discord logging is disabled in config.yml.");
+            Console.warn(this.logger, "Discord logging is disabled in config.yml.");
             return;
         }
 
         if (this.configManager.getBotToken().isBlank() || this.configManager.getGuildId().isBlank()) {
-            this.logger.warning("Discord logging is enabled, but the bot token or guild ID is missing.");
+            Console.warn(this.logger, "Discord logging is enabled, but the bot token or guild ID is missing.");
             return;
         }
 
@@ -95,12 +99,12 @@ public class ProxyLogger {
                     .awaitReady();
 
             this.discordLogger = new DiscordLogger(this.proxyServer, this.jda, this.configManager.getGuildId(), this.logger, this.configManager);
-            this.logger.info("Connected to Discord.");
+            Console.success(this.logger, "Connected to Discord.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            this.logger.warning("Discord startup was interrupted.");
+            Console.warn(this.logger, "Discord startup was interrupted.");
         } catch (Exception e) {
-            this.logger.log(Level.SEVERE, "Failed to start Discord logging.", e);
+            Console.error(this.logger, "Failed to start Discord logging.", e);
         }
     }
 

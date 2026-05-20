@@ -1,4 +1,4 @@
-package org.flennn;
+package org.flennn.proxylogger.util;
 
 public final class Utils {
     private Utils() {

@@ -1,4 +1,4 @@
-package org.flennn;
+package org.flennn.proxylogger.discord;
 
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.server.ServerRegisteredEvent;
@@ -9,6 +9,9 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import org.flennn.proxylogger.config.ConfigManager;
+import org.flennn.proxylogger.util.Console;
+import org.flennn.proxylogger.util.Utils;
 
 import java.time.Instant;
 import java.util.List;
@@ -121,7 +124,7 @@ public class DiscordLogger implements AutoCloseable {
 
                 this.serverChannels.put(key, new ServerChannels(chat, commands, joinLeave));
             } catch (Exception e) {
-                this.logger.warning("Failed to prepare Discord channels for " + serverName + ": " + e.getMessage());
+                Console.warn(this.logger, "Failed to prepare Discord channels for " + serverName + ": " + e.getMessage());
             } finally {
                 this.setupInProgress.remove(key);
             }

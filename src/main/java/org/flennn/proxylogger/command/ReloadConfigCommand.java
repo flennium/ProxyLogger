@@ -1,4 +1,4 @@
-package org.flennn;
+package org.flennn.proxylogger.command;
 
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
@@ -6,6 +6,8 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.flennn.proxylogger.ProxyLogger;
+import org.flennn.proxylogger.config.ConfigManager;
 
 import java.util.List;
 
