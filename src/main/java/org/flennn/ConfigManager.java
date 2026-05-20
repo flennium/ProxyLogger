@@ -1,35 +1,31 @@
 package org.flennn;
 
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
-import com.velocitypowered.api.proxy.ProxyServer;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import javax.inject.Inject;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public class ConfigManager {
     private final Logger logger;
     private final Path configPath;
     private final Yaml yaml;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private Map<String, Object> config;
+    private Map<String, Object> config = new HashMap<>();
 
     @Inject
-    public ConfigManager(ProxyServer proxyServer, Logger logger, @DataDirectory Path dataFolder) {
+    public ConfigManager(Logger logger, @DataDirectory Path dataFolder) {
         this.logger = logger;
         this.configPath = dataFolder.resolve("config.yml");
 
@@ -37,152 +33,300 @@ public class ConfigManager {
         options.setIndent(2);
         options.setPrettyFlow(true);
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-
         this.yaml = new Yaml(options);
-        initialize();
+
+        reload();
     }
 
-    private void initialize() {
+    public synchronized void reload() {
         try {
-            loadConfig();
-            startAutoReload();
-        } catch (Exception e) {
-            Utils.Log.severe("❌ Failed to initialize configuration: " + e.getMessage());
-
-            handleCriticalError();
-        }
-    }
-
-    private synchronized void loadConfig() throws IOException {
-        Files.createDirectories(configPath.getParent());
-
-        if (!Files.exists(configPath)) {
-            try (InputStream is = getClass().getResourceAsStream("/config.yml")) {
-                if (is != null) {
-                    Files.copy(is, configPath, StandardCopyOption.REPLACE_EXISTING);
-                }
+            Files.createDirectories(this.configPath.getParent());
+            if (!Files.exists(this.configPath)) {
+                copyDefaultConfig();
             }
-        }
 
-        try (InputStream inputStream = Files.newInputStream(configPath)) {
-            config = yaml.load(inputStream);
-        }
+            try (InputStream inputStream = Files.newInputStream(this.configPath)) {
+                Object loaded = this.yaml.load(inputStream);
+                this.config = loaded instanceof Map<?, ?> map ? normalizeMap(map) : new HashMap<>();
+            }
 
-        if (config == null) {
-            config = new HashMap<>();
-        }
-
-        validateConfig();
-        Utils.Log.info("✅ Configuration loaded successfully.");
-    }
-
-    public synchronized void saveConfig() {
-        try (Writer writer = Files.newBufferedWriter(configPath)) {
-            yaml.dump(config, writer);
-            Utils.Log.info("✅ Configuration saved successfully.");
+            validate();
         } catch (IOException e) {
-            Utils.Log.severe("❌ Failed to save config: " + e.getMessage());
+            this.logger.severe("Failed to load config.yml: " + e.getMessage());
+            this.config = new HashMap<>();
         }
     }
 
-
-    public synchronized void reloadConfig() {
-        try {
-            loadConfig();
-            Utils.Log.info("✅ Configuration reloaded");
-        } catch (IOException e) {
-            Utils.Log.severe("❌ Config Reload failed: " + e.getMessage());
+    private void copyDefaultConfig() throws IOException {
+        try (InputStream inputStream = getClass().getResourceAsStream("/config.yml")) {
+            if (inputStream == null) {
+                Files.createFile(this.configPath);
+                return;
+            }
+            Files.copy(inputStream, this.configPath, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
-    private void validateConfig() {
-        if (config == null || config.isEmpty()) {
-            Utils.Log.severe("❌ Configuration is empty or null");
+    private void validate() {
+        if (!isDiscordEnabled()) {
             return;
         }
 
-        Map<String, Object> discord = getSection("discord");
-        if (discord == null || !discord.containsKey("bot-token") || discord.get("bot-token").toString().isEmpty()) {
-            Utils.Log.severe("❌ Discord bot token is required");
+        if (getBotToken().isBlank()) {
+            this.logger.warning("Discord logging is enabled, but discord.bot-token is empty.");
+        }
+
+        if (getGuildId().isBlank()) {
+            this.logger.warning("Discord logging is enabled, but discord.guild-id is empty.");
         }
     }
 
-    public void startAutoReload() {
-        scheduler.scheduleAtFixedRate(this::reloadConfig, 30, 30, TimeUnit.MINUTES);
+    public boolean isDiscordEnabled() {
+        return getBoolean("discord.enabled", true);
     }
-
-    // =======================
-    // Configuration Getters
-    // =======================
 
     public String getBotToken() {
         return getString("discord.bot-token", "");
     }
 
-    public String getLogsGuildID() {
-        return getString("discord.logger-guildid", "");
+    public String getGuildId() {
+        return getString("discord.guild-id", "");
     }
 
-
-    public Boolean IsLogger() {
-        return getBoolean("discord.logger", false);
+    public boolean shouldAutoCreateChannels() {
+        return getBoolean("channels.auto-create", true);
     }
 
+    public long getChannelVerifyIntervalSeconds() {
+        return Math.max(30, getLong("channels.verify-interval-seconds", 120));
+    }
 
-    // =======================
-    // Helper Methods
-    // =======================
+    public String getCategoryFormat() {
+        return getString("channels.category-format", "{server}");
+    }
+
+    public String getChatChannelName() {
+        return normalizeChannelName(getString("channels.names.chat", "chat-logs"));
+    }
+
+    public String getCommandChannelName() {
+        return normalizeChannelName(getString("channels.names.commands", "commands"));
+    }
+
+    public String getJoinLeaveChannelName() {
+        return normalizeChannelName(getString("channels.names.join-leave", "join-leave"));
+    }
+
+    public String getChatChannelTopic() {
+        return getString("channels.topics.chat", "Player chat logs");
+    }
+
+    public String getCommandChannelTopic() {
+        return getString("channels.topics.commands", "Player command logs");
+    }
+
+    public String getJoinLeaveChannelTopic() {
+        return getString("channels.topics.join-leave", "Player join and leave logs");
+    }
+
+    public boolean isChatLoggingEnabled() {
+        return getBoolean("events.chat.enabled", true);
+    }
+
+    public boolean isCommandLoggingEnabled() {
+        return getBoolean("events.commands.enabled", true);
+    }
+
+    public boolean isJoinLoggingEnabled() {
+        return getBoolean("events.join.enabled", true);
+    }
+
+    public boolean isLeaveLoggingEnabled() {
+        return getBoolean("events.leave.enabled", true);
+    }
+
+    public boolean isServerSwitchLoggingEnabled() {
+        return getBoolean("events.server-switch.enabled", false);
+    }
+
+    public boolean shouldLogConsoleCommands() {
+        return getBoolean("events.commands.log-console", false);
+    }
+
+    public boolean includeIp() {
+        return getBoolean("privacy.include-ip", false);
+    }
+
+    public boolean includeUuid() {
+        return getBoolean("privacy.include-uuid", true);
+    }
+
+    public boolean includeClient() {
+        return getBoolean("privacy.include-client", true);
+    }
+
+    public boolean includeServer() {
+        return getBoolean("privacy.include-server", true);
+    }
+
+    public List<String> getIgnoredServers() {
+        return getLowercaseList("filters.ignored-servers");
+    }
+
+    public List<String> getIgnoredCommands() {
+        return getLowercaseList("filters.ignored-commands");
+    }
+
+    public int getMaxMessageLength() {
+        return Math.max(100, getInt("format.max-message-length", 1800));
+    }
+
+    public boolean useEmbeds() {
+        return getBoolean("format.embeds.enabled", true);
+    }
+
+    public boolean showTimestamp() {
+        return getBoolean("format.embeds.timestamp", true);
+    }
+
+    public String getFooterText() {
+        return getString("format.embeds.footer", "ProxyLogger - {server}");
+    }
+
+    public int getChatColor() {
+        return parseColor(getString("format.embeds.colors.chat", "#3498db"), 0x3498db);
+    }
+
+    public int getCommandColor() {
+        return parseColor(getString("format.embeds.colors.commands", "#f39c12"), 0xf39c12);
+    }
+
+    public int getJoinColor() {
+        return parseColor(getString("format.embeds.colors.join", "#2ecc71"), 0x2ecc71);
+    }
+
+    public int getLeaveColor() {
+        return parseColor(getString("format.embeds.colors.leave", "#e74c3c"), 0xe74c3c);
+    }
+
+    public int getSwitchColor() {
+        return parseColor(getString("format.embeds.colors.server-switch", "#9b59b6"), 0x9b59b6);
+    }
+
+    public String getReloadCommandName() {
+        return getString("commands.reload.name", "proxylogger");
+    }
+
+    public List<String> getReloadCommandAliases() {
+        return getList("commands.reload.aliases");
+    }
+
+    public String getReloadPermission() {
+        return getString("commands.reload.permission", "proxylogger.admin");
+    }
+
+    public String getString(String key, String defaultValue) {
+        Object value = getValue(key);
+        return value == null ? defaultValue : String.valueOf(value);
+    }
+
+    public boolean getBoolean(String key, boolean defaultValue) {
+        Object value = getValue(key);
+        return value == null ? defaultValue : Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    public int getInt(String key, int defaultValue) {
+        Object value = getValue(key);
+        if (value == null) {
+            return defaultValue;
+        }
+
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    public long getLong(String key, long defaultValue) {
+        Object value = getValue(key);
+        if (value == null) {
+            return defaultValue;
+        }
+
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
 
     @SuppressWarnings("unchecked")
-    public Map<String, Object> getSection(String key) {
+    public List<String> getList(String key) {
         Object value = getValue(key);
-        return (value instanceof Map) ? (Map<String, Object>) value : new HashMap<>();
+        if (!(value instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+
+        List<String> result = new ArrayList<>();
+        for (Object item : list) {
+            if (item != null) {
+                result.add(String.valueOf(item));
+            }
+        }
+        return result;
     }
 
-    private int getInt(String key, int defaultValue) {
-        Object value = getValue(key);
-        return value != null ? Integer.parseInt(value.toString()) : defaultValue;
-    }
-
-    private String getString(String key, String defaultValue) {
-        Object value = getValue(key);
-        return value != null ? value.toString() : defaultValue;
-    }
-
-    private boolean getBoolean(String key, boolean defaultValue) {
-        Object value = getValue(key);
-        return value != null ? Boolean.parseBoolean(value.toString()) : defaultValue;
-    }
-
-    private List<String> getList(String key) {
-        Object value = getValue(key);
-        return (value instanceof List) ? (List<String>) value : new ArrayList<>();
-    }
-
-    private void set(String key, Object value) {
-        setValue(key, value);
-        saveConfig();
-    }
-
+    @SuppressWarnings("unchecked")
     private Object getValue(String key) {
-        String[] keys = key.split("\\.");
-        Map<String, Object> section = config;
-        for (int i = 0; i < keys.length - 1; i++) {
-            section = (Map<String, Object>) section.computeIfAbsent(keys[i], k -> new HashMap<>());
+        String[] parts = key.split("\\.");
+        Map<String, Object> current = this.config;
+
+        for (int i = 0; i < parts.length - 1; i++) {
+            Object child = current.get(parts[i]);
+            if (!(child instanceof Map<?, ?>)) {
+                return null;
+            }
+            current = (Map<String, Object>) child;
         }
-        return section.get(keys[keys.length - 1]);
+
+        return current.get(parts[parts.length - 1]);
     }
 
-    private void setValue(String key, Object value) {
-        String[] keys = key.split("\\.");
-        Map<String, Object> section = config;
-        for (int i = 0; i < keys.length - 1; i++) {
-            section = (Map<String, Object>) section.computeIfAbsent(keys[i], k -> new HashMap<>());
-        }
-        section.put(keys[keys.length - 1], value);
+    private List<String> getLowercaseList(String key) {
+        return getList(key).stream()
+                .map(value -> value.toLowerCase(Locale.ROOT))
+                .toList();
     }
 
-    private void handleCriticalError() {
-        logger.severe("CRITICAL CONFIG ERROR - Plugin may not function properly");
+    private String normalizeChannelName(String name) {
+        return name.toLowerCase(Locale.ROOT)
+                .replace(' ', '-')
+                .replaceAll("[^a-z0-9-_]", "");
+    }
+
+    private int parseColor(String value, int defaultValue) {
+        try {
+            String color = value.startsWith("#") ? value.substring(1) : value;
+            return Integer.parseInt(color, 16);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private Map<String, Object> normalizeMap(Map<?, ?> input) {
+        Map<String, Object> result = new HashMap<>();
+        for (Map.Entry<?, ?> entry : input.entrySet()) {
+            if (entry.getKey() == null) {
+                continue;
+            }
+
+            Object value = entry.getValue();
+            if (value instanceof Map<?, ?> map) {
+                value = normalizeMap(map);
+            }
+            result.put(String.valueOf(entry.getKey()), value);
+        }
+        return result;
     }
 }

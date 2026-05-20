@@ -1,44 +1,59 @@
 package org.flennn;
 
 import com.velocitypowered.api.command.CommandManager;
+import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
-import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
+import java.util.List;
+
 public class ReloadConfigCommand implements SimpleCommand {
     private final ProxyLogger plugin;
-    private final ConfigManager configManager;
-    private final ProxyServer proxyServer;
+    private final ConfigManager config;
 
-    public ReloadConfigCommand(ProxyLogger plugin, ConfigManager configManager, ProxyServer proxyServer) {
+    public ReloadConfigCommand(ProxyLogger plugin, ConfigManager config) {
         this.plugin = plugin;
-        this.configManager = configManager;
-        this.proxyServer = proxyServer;
+        this.config = config;
     }
 
     @Override
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
-        if (!source.hasPermission("logger.admin")) {
-            source.sendMessage(Component.text(" ❌ You do not have permission to use this command.", NamedTextColor.RED));
+        String[] arguments = invocation.arguments();
+
+        if (arguments.length == 0 || !arguments[0].equalsIgnoreCase("reload")) {
+            source.sendMessage(Component.text("Usage: /" + this.config.getReloadCommandName() + " reload", NamedTextColor.YELLOW));
             return;
         }
 
-        source.sendMessage(Component.text(" 🔄 Reloading Logger...", NamedTextColor.YELLOW));
+        if (!source.hasPermission(this.config.getReloadPermission())) {
+            source.sendMessage(Component.text("You do not have permission to reload ProxyLogger.", NamedTextColor.RED));
+            return;
+        }
 
-        plugin.reload();
+        this.plugin.reload();
+        source.sendMessage(Component.text("ProxyLogger reloaded.", NamedTextColor.GREEN));
+    }
 
-        source.sendMessage(Component.text(" ✅ Logger reloaded successfully!", NamedTextColor.GREEN));
+    @Override
+    public List<String> suggest(Invocation invocation) {
+        if (invocation.arguments().length <= 1) {
+            return List.of("reload");
+        }
+        return List.of();
     }
 
     public void register(CommandManager commandManager, Object plugin) {
-        commandManager.register(
-                commandManager.metaBuilder("reloadconfig")
-                        .plugin(plugin)
-                        .build(),
-                this
-        );
+        CommandMeta.Builder meta = commandManager.metaBuilder(this.config.getReloadCommandName())
+                .plugin(plugin);
+
+        List<String> aliases = this.config.getReloadCommandAliases();
+        if (!aliases.isEmpty()) {
+            meta.aliases(aliases.toArray(String[]::new));
+        }
+
+        commandManager.register(meta.build(), this);
     }
 }

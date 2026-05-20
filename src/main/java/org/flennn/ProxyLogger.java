@@ -14,111 +14,105 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 import java.nio.file.Path;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.EnumSet;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
-@Plugin(id = "proxylogger", name = "ProxyLogger", version = "1.0.1", authors = {"flennn"})
+@Plugin(id = "proxylogger", name = "ProxyLogger", version = "1.1.0", authors = {"flennn"})
 public class ProxyLogger {
-
-    private static ProxyLogger instance;
-    private final ConfigManager configManager;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ProxyServer proxyServer;
     private final Logger logger;
-    private JDA jda;
-    private DiscordLogger discordLogger;
+    private final ConfigManager configManager;
 
+    private DiscordLogger discordLogger;
+    private JDA jda;
 
     @Inject
     public ProxyLogger(ProxyServer proxyServer, Logger logger, @DataDirectory Path dataFolder) {
         this.proxyServer = proxyServer;
         this.logger = logger;
-        this.configManager = new ConfigManager(proxyServer, logger, dataFolder);
-    }
-
-    public static ProxyLogger getInstance() {
-        return instance;
+        this.configManager = new ConfigManager(logger, dataFolder);
     }
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-        Utils.Log.info(" 🔧 Starting Logger ...");
-        instance = this;
-
-        if (LaunchDiscord()) {
-            registerListeners();
-        }
-
+        this.logger.info("Starting ProxyLogger...");
+        startDiscord();
+        registerListeners();
         registerCommands();
-
-        Utils.Log.info(" ✅ Logger successfully loaded!");
-    }
-
-    public void registerListeners() {
-        discordLogger = new DiscordLogger(proxyServer, jda, configManager.getLogsGuildID(), logger, configManager);
-        proxyServer.getEventManager().register(this, new ActivityListeners(discordLogger, configManager));
-    }
-
-    public void registerCommands() {
-        CommandManager commandManager = proxyServer.getCommandManager();
-
-        new ReloadConfigCommand(this, configManager, proxyServer).register(commandManager, this);
-    }
-
-    public boolean LaunchDiscord() {
-        try {
-            JDABuilder builder = JDABuilder.create(configManager.getBotToken(), GatewayIntent.getIntents(GatewayIntent.ALL_INTENTS));
-            builder.disableCache(CacheFlag.EMOJI, CacheFlag.STICKER, CacheFlag.SCHEDULED_EVENTS);
-
-            jda = builder.build().awaitReady();
-
-            Utils.Log.info(" ✅ Logger Discord-bot successfully loaded!");
-            return true;
-        } catch (InterruptedException e) {
-            Utils.Log.severe(" ❌ Failed to start Discord bot");
-            e.printStackTrace();
-        }
-        return false;
-    }
-
-    public void shutdown() {
-        if (!scheduler.isShutdown()) {
-            scheduler.shutdownNow();
-
-            try {
-                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                    Utils.Log.warning(" DiscordLogger scheduler did not terminate in time.");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                Utils.Log.warning(" DiscordLogger scheduler shutdown interrupted.");
-            }
-
-            if (jda != null) {
-                jda.shutdown();
-            }
-        }
+        this.logger.info("ProxyLogger is ready.");
     }
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
-        shutdown();
+        shutdownDiscord();
     }
 
-    public void reload() {
-        shutdown();
-        Utils.Log.info(" 🔄 Reloading Logger...");
-        configManager.reloadConfig();
+    public ConfigManager getConfigManager() {
+        return this.configManager;
+    }
 
-        proxyServer.getEventManager().unregisterListeners(this);
+    public DiscordLogger getDiscordLogger() {
+        return this.discordLogger;
+    }
 
-        LaunchDiscord();
+    public Logger getLogger() {
+        return this.logger;
+    }
 
-        registerListeners();
-        registerCommands();
+    private void registerListeners() {
+        this.proxyServer.getEventManager().register(this, new ActivityListeners(this));
+    }
 
-        Utils.Log.info(" 🔁 Logger config and listeners reloaded.");
+    private void registerCommands() {
+        CommandManager commandManager = this.proxyServer.getCommandManager();
+        new ReloadConfigCommand(this, this.configManager).register(commandManager, this);
+    }
+
+    public synchronized void reload() {
+        this.logger.info("Reloading ProxyLogger...");
+        this.configManager.reload();
+        shutdownDiscord();
+        startDiscord();
+        this.logger.info("ProxyLogger reloaded.");
+    }
+
+    private synchronized void startDiscord() {
+        if (!this.configManager.isDiscordEnabled()) {
+            this.logger.info("Discord logging is disabled in config.yml.");
+            return;
+        }
+
+        if (this.configManager.getBotToken().isBlank() || this.configManager.getGuildId().isBlank()) {
+            this.logger.warning("Discord logging is enabled, but the bot token or guild ID is missing.");
+            return;
+        }
+
+        try {
+            this.jda = JDABuilder.create(this.configManager.getBotToken(), EnumSet.of(GatewayIntent.GUILD_MESSAGES))
+                    .disableCache(CacheFlag.ACTIVITY, CacheFlag.EMOJI, CacheFlag.STICKER, CacheFlag.SCHEDULED_EVENTS)
+                    .build()
+                    .awaitReady();
+
+            this.discordLogger = new DiscordLogger(this.proxyServer, this.jda, this.configManager.getGuildId(), this.logger, this.configManager);
+            this.logger.info("Connected to Discord.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            this.logger.warning("Discord startup was interrupted.");
+        } catch (Exception e) {
+            this.logger.log(Level.SEVERE, "Failed to start Discord logging.", e);
+        }
+    }
+
+    private synchronized void shutdownDiscord() {
+        if (this.discordLogger != null) {
+            this.discordLogger.close();
+            this.discordLogger = null;
+        }
+
+        if (this.jda != null) {
+            this.jda.shutdown();
+            this.jda = null;
+        }
     }
 }

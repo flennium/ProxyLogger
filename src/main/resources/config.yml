@@ -1,9 +1,88 @@
-# ┏━━━━━━ Logger Settings ━━━━━━━┓
+# ProxyLogger configuration
+#
+# Discord setup:
+# 1. Create a bot at https://discord.com/developers/applications
+# 2. Invite it to your server with permissions to view/manage channels and send messages.
+# 3. Put the bot token and Discord server ID below.
 
-# Discord Guild ID for logging
 discord:
+  enabled: true
   bot-token: ""
-  logger: true
-  logger-guildid: "54882415665525845"
+  guild-id: ""
 
-# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+channels:
+  # If true, ProxyLogger creates a category per backend server and creates missing log channels.
+  auto-create: true
+
+  # How often ProxyLogger checks that categories/channels still exist.
+  verify-interval-seconds: 120
+
+  # {server} is replaced with the Velocity server name.
+  category-format: "{server}"
+
+  names:
+    chat: "chat-logs"
+    commands: "commands"
+    join-leave: "join-leave"
+
+  topics:
+    chat: "Player chat logs"
+    commands: "Player command logs"
+    join-leave: "Player join, leave, and server switch logs"
+
+events:
+  chat:
+    enabled: true
+
+  commands:
+    enabled: true
+    log-console: false
+
+  join:
+    enabled: true
+
+  leave:
+    enabled: true
+
+  # Disabled by default because busy networks can switch servers often.
+  server-switch:
+    enabled: false
+
+privacy:
+  include-ip: false
+  include-uuid: true
+  include-client: true
+  include-server: true
+
+filters:
+  # Velocity server names to skip.
+  ignored-servers: []
+
+  # Root command names to skip. Do not include the slash.
+  ignored-commands:
+    - "login"
+    - "register"
+    - "changepassword"
+
+format:
+  max-message-length: 1800
+
+  embeds:
+    enabled: true
+    timestamp: true
+    footer: "ProxyLogger - {server}"
+
+    colors:
+      chat: "#3498db"
+      commands: "#f39c12"
+      join: "#2ecc71"
+      leave: "#e74c3c"
+      server-switch: "#9b59b6"
+
+commands:
+  reload:
+    name: "proxylogger"
+    aliases:
+      - "plogger"
+      - "plreloadconfig"
+    permission: "proxylogger.admin"
