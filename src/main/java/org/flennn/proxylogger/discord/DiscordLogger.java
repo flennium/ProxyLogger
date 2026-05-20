@@ -14,6 +14,7 @@ import org.flennn.proxylogger.util.Console;
 import org.flennn.proxylogger.util.Utils;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,10 +53,9 @@ public class DiscordLogger implements AutoCloseable {
 
     private void initialize() {
         this.proxy.getEventManager().register(this, this);
-        this.proxy.getAllServers().forEach(server -> setupServer(server.getServerInfo().getName()));
-        setupServer("proxy");
+        syncServers();
         this.scheduler.scheduleAtFixedRate(
-                () -> this.proxy.getAllServers().forEach(server -> setupServer(server.getServerInfo().getName())),
+                this::syncServers,
                 this.config.getChannelVerifyIntervalSeconds(),
                 this.config.getChannelVerifyIntervalSeconds(),
                 TimeUnit.SECONDS
@@ -64,7 +64,7 @@ public class DiscordLogger implements AutoCloseable {
 
     @Subscribe
     public void onServerRegistered(ServerRegisteredEvent event) {
-        setupServer(event.registeredServer().getServerInfo().getName());
+        syncServers();
     }
 
     public void log(String serverName, LogType type, String actor, List<String> details) {
@@ -115,6 +115,7 @@ public class DiscordLogger implements AutoCloseable {
                 }
 
                 if (category == null) {
+                    this.serverChannels.remove(key);
                     return;
                 }
 
@@ -122,8 +123,14 @@ public class DiscordLogger implements AutoCloseable {
                 TextChannel commands = getOrCreateChannel(category, this.config.getCommandChannelName(), this.config.getCommandChannelTopic());
                 TextChannel joinLeave = getOrCreateChannel(category, this.config.getJoinLeaveChannelName(), this.config.getJoinLeaveChannelTopic());
 
+                if (chat == null && commands == null && joinLeave == null) {
+                    this.serverChannels.remove(key);
+                    return;
+                }
+
                 this.serverChannels.put(key, new ServerChannels(chat, commands, joinLeave));
             } catch (Exception e) {
+                this.serverChannels.remove(key);
                 Console.warn(this.logger, "Failed to prepare Discord channels for " + serverName + ": " + e.getMessage());
             } finally {
                 this.setupInProgress.remove(key);
@@ -131,22 +138,50 @@ public class DiscordLogger implements AutoCloseable {
         });
     }
 
+    private void syncServers() {
+        Set<String> expectedServers = expectedServerNames();
+        Set<String> expectedKeys = expectedServers.stream()
+                .map(this::normalizeKey)
+                .collect(java.util.stream.Collectors.toSet());
+
+        this.serverChannels.keySet().removeIf(key -> !expectedKeys.contains(key));
+        this.setupInProgress.removeIf(key -> !expectedKeys.contains(key));
+        expectedServers.forEach(this::setupServer);
+    }
+
+    private Set<String> expectedServerNames() {
+        Set<String> servers = new HashSet<>();
+        this.proxy.getAllServers().forEach(server -> servers.add(server.getServerInfo().getName()));
+        if (this.config.shouldLogConsoleCommands()) {
+            servers.add("proxy");
+        }
+        return servers;
+    }
+
     private Category findCategory(String serverName) {
         String expected = formatCategory(serverName);
-        return this.guild.getCategories().stream()
+        List<Category> matches = this.guild.getCategories().stream()
                 .filter(category -> category.getName().equalsIgnoreCase(expected))
-                .findFirst()
-                .orElse(null);
+                .toList();
+
+        if (matches.size() > 1) {
+            Console.warn(this.logger, "Found " + matches.size() + " Discord categories named '" + expected + "'. Using the first one and not creating another.");
+        }
+
+        return matches.stream().findFirst().orElse(null);
     }
 
     private TextChannel getOrCreateChannel(Category category, String name, String topic) {
-        TextChannel existing = category.getTextChannels().stream()
+        List<TextChannel> existingChannels = category.getTextChannels().stream()
                 .filter(channel -> channel.getName().equalsIgnoreCase(name))
-                .findFirst()
-                .orElse(null);
+                .toList();
 
-        if (existing != null || !this.config.shouldAutoCreateChannels()) {
-            return existing;
+        if (existingChannels.size() > 1) {
+            Console.warn(this.logger, "Found " + existingChannels.size() + " Discord channels named '" + name + "' in '" + category.getName() + "'. Using the first one and not creating another.");
+        }
+
+        if (!existingChannels.isEmpty() || !this.config.shouldAutoCreateChannels()) {
+            return existingChannels.stream().findFirst().orElse(null);
         }
 
         return category.createTextChannel(name)
