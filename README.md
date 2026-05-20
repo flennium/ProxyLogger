@@ -1,8 +1,8 @@
 # ProxyLogger
 
-ProxyLogger is a Velocity plugin that sends proxy activity logs to Discord. It can log player chat, commands, joins, leaves, and optional server switches, with a separate Discord category for each backend server.
+ProxyLogger is a configurable Discord audit logger for Velocity networks. It tracks player chat, commands, joins, leaves, and optional server switches, then organizes the logs into clean per-server Discord channels.
 
-The plugin is built for networks that want useful audit logs without giving staff direct access to proxy log files.
+It is built for server owners who want readable staff logs, simple privacy controls, and a release jar that is ready to drop into production.
 
 ## Features
 

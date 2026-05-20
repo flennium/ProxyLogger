@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <name>ProxyLogger</name>
-    <description>Configurable Discord activity logging for Velocity proxies.</description>
+    <description>Configurable Discord audit logging for Velocity networks.</description>
     <url>https://github.com/flennium/ProxyLogger</url>
 
     <properties>
