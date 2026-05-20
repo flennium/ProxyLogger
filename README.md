@@ -110,3 +110,7 @@ target/ProxyLogger-<version>.jar
 Keep the bot token private. Anyone with the token can control the bot.
 
 If automatic channel creation is disabled, create categories and channels manually using the names from `config.yml`.
+
+## License
+
+ProxyLogger is released under the MIT License. See [LICENSE](LICENSE).
