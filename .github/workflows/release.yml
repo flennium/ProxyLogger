@@ -26,8 +26,22 @@ jobs:
       - name: Build
         run: mvn --batch-mode clean package
 
+      - name: Prepare release artifact
+        id: artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          JAR="$(find target -maxdepth 1 -type f \( -name '*-shaded.jar' -o -name '*.jar' \) ! -name 'original-*' | head -n 1)"
+          if [ -z "$JAR" ]; then
+            echo "No shaded release jar found in target" >&2
+            ls -la target >&2
+            exit 1
+          fi
+          cp "$JAR" dist/
+          echo "file=dist/$(basename "$JAR")" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: target/proxylogger-*-shaded.jar
+          files: ${{ steps.artifact.outputs.file }}
