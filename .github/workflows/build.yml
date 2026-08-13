@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
           cache: maven
 
       - name: Build
@@ -29,4 +29,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ProxyLogger
-          path: target/ProxyLogger-*.jar
+          path: target/proxylogger-*-shaded.jar

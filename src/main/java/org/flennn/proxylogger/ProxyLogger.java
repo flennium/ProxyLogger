@@ -22,7 +22,7 @@ import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.logging.Logger;
 
-@Plugin(id = "proxylogger", name = "ProxyLogger", version = "1.1.2", authors = {"flennn"})
+@Plugin(id = "proxylogger", name = "ProxyLogger", version = "1.1.3", authors = {"flennn"})
 public class ProxyLogger {
     private final ProxyServer proxyServer;
     private final Logger logger;
