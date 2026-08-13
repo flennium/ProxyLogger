@@ -18,7 +18,7 @@ It is built for server owners who want readable staff logs, simple privacy contr
 ## Requirements
 
 - Velocity 4.1 or newer
-- Java 21 or newer
+- Java 25 or newer
 - A Discord bot token
 - A Discord server ID
 
